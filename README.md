@@ -1,6 +1,6 @@
 # Scrna Cell Qc Metrics Filter
 
-> **Domain:** Computational Biology & AI Drug Discovery  
+> **Domain:** Computational Biology & AI Drug Discovery
 > **Reference Guidelines & Standards:** `wwPDB, IUPAC & CLSI Computational Guidelines`
 
 <div align="center">
@@ -31,63 +31,94 @@ License: MIT
 
 ### 🔬 Analytical Functions
 
-- **`calculate_metrics()`**: Core domain algorithm for scrna-cell-qc-metrics-filter.
-- **`process_single()`** — calculates and validates process_single parameters.
-- **`process_batch()`** — calculates and validates process_batch parameters.
-- **`main()`** — calculates and validates main parameters.
+- **`calculate_metrics()`**: Core domain algorithm that computes a weighted score from numeric inputs and classifies results into Low/Moderate/High tiers.
+- **`process_single()`** — Evaluates a single case with provided parameters.
+- **`process_batch()`** — Processes a CSV file of records, appending QC metrics to each row.
+- **`main()`** — CLI entry point supporting `single` and `batch` subcommands.
 
 ---
 
 ## 📐 Mathematical Formulation & Logic
 
 ```text
-  score = primary_val
-  rounded_score = round(score, 2)
-  res = calculate_metrics(**kwargs)
-  calc_res = calculate_metrics(**r)
+score = primary_val + sum(nv * (1/idx) for idx, nv in enumerate(remaining_vals, start=2))
+rounded_score = round(score, 2)
+
+Classification tiers:
+  score < 10.0  → "Low / Standard"
+  score < 25.0  → "Moderate / Intermediate"
+  score >= 25.0 → "High / Severe"
+```
+
+---
+
+## 💻 Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/abusuraihsakhri/scrna-cell-qc-metrics-filter.git
+cd scrna-cell-qc-metrics-filter
+
+# Install core dependencies (pydantic required)
+pip install pydantic>=2.0
+
+# Optional: Install API server dependencies
+pip install fastapi>=0.110 "uvicorn[standard]>=0.27"
+
+# Optional: Install development dependencies
+pip install pytest>=8.0
 ```
 
 ---
 
 ## 💻 CLI Quickstart & Usage
 
-### 1. Guided Interactive Mode
+### 1. Single Case Evaluation
 ```bash
-python cli.py
+python scrna_qc.py single --v1 10.0 --v2 5.0 --v3 2.0
 ```
 
-### 2. Direct Parameterized Evaluation
+### 2. Batch CSV Processing
 ```bash
-python cli.py --task-id <value> --target <value> --primary <value> --secondary <value>
+python scrna_qc.py batch -i sample.csv -o results.csv
+```
+
+### 3. Enterprise CLI (requires pydantic)
+```bash
+# Audit a single task
+python cli.py audit --task-id TASK-001 --primary 28.5 --secondary 14.2
+
+# Batch process records
+python cli.py batch -i sample.csv -o results.csv
+
+# Verify audit trail integrity
+python cli.py verify-audit
+
+# Launch FastAPI REST server
+python cli.py serve --host 127.0.0.1 --port 8000
 ```
 
 ### Parameter Reference
-- `--task-id`: Specifies input measurement or parameter value.
-- `--target`: Specifies input measurement or parameter value.
-- `--primary`: Specifies input measurement or parameter value.
-- `--secondary`: Specifies input measurement or parameter value.
-- `--critical`: Specifies input measurement or parameter value.
-- `--status`: Specifies input measurement or parameter value.
-- `--input`: Specifies input measurement or parameter value.
-- `--output`: Specifies input measurement or parameter value.
+- `--v1`, `--v2`, `--v3`: Numeric parameters for single evaluation (default: 10.0, 5.0, 2.0)
+- `-i`, `--input`: Input CSV file path (required for batch)
+- `-o`, `--output`: Output CSV file path (default: results.csv)
 
 ### Input Data Schema
 
 | Field | Description | Requirement |
 |:------|:------------|:------------|
-| `Patient_ID` | Parameter / observation metric | Required |
-| `v1` | Parameter / observation metric | Required |
-| `v2` | Parameter / observation metric | Required |
-| `v3` | Parameter / observation metric | Required |
+| `Patient_ID` | Patient identifier | Required |
+| `v1` | Primary measurement | Required |
+| `v2` | Secondary measurement | Required |
+| `v3` | Tertiary measurement | Optional |
 
 ---
 
 ## 🛡️ Security & Enterprise Architecture
 
-* **Zero-PHI Outbound Interceptor:** Active AST and regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers.
+* **Zero-PHI Outbound Interceptor:** Active regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers.
 * **Tamper-Evident HMAC-SHA256 Audit Trail:** Chained, cryptographically signed logs for every evaluation and state transition.
-* **Air-Gapped LLM Reasoning Adapter:** Agnostic integration for local Ollama instances (`llama3`, `mistral`), Claude 3.5 Sonnet, GPT-4o, and deterministic test mocks.
-* **Active Learning Bayesian Calibration:** Dynamic tracker updating worker reliability weights and monitoring Brier calibration drift.
+* **Configurable Audit Secret:** Set `AUDIT_SECRET_KEY` environment variable for persistent audit integrity across restarts. Without it, a random key is generated (with a warning).
 * **FastAPI & Prometheus Telemetry:** Exposes OpenAPI 3.1 REST endpoints and operational Prometheus metrics (`/metrics`).
 
 ---
@@ -100,10 +131,17 @@ Run the automated test suite:
 pytest -v
 ```
 
+Run specific test files:
+
+```bash
+pytest tests/ -v          # Enterprise module tests
+pytest test_scrna_qc.py -v  # Core QC tests
+```
+
 Execute high-throughput batch simulation benchmarks:
 
 ```bash
-python simulator.py --tasks 1000 --concurrency 8
+python simulator.py 100
 ```
 
 ---
@@ -113,4 +151,27 @@ python simulator.py --tasks 1000 --concurrency 8
 ```bash
 docker build -t scrna-cell-qc-metrics-filter .
 docker run -p 8000:8000 scrna-cell-qc-metrics-filter
+```
+
+---
+
+## 📁 Project Structure
+
+```
+scrna-cell-qc-metrics-filter/
+├── scrna_qc.py          # Core QC algorithm & CLI
+├── cli.py               # Enterprise CLI with audit/PHI features
+├── enrichment.py        # Enrichment analysis modules
+├── simulator.py         # High-throughput simulation
+├── agents/              # Enterprise agent framework
+│   ├── base.py          # Security, PHI guard, audit trail
+│   ├── models.py        # Pydantic data models
+│   ├── supervisor.py    # Multi-agent orchestrator
+│   ├── workers.py       # Specialized domain workers
+│   ├── api.py           # FastAPI REST server
+│   └── ...
+├── tests/               # Test suite
+├── sample.csv           # Sample input data
+├── pyproject.toml       # Project configuration
+└── Dockerfile           # Container build
 ```

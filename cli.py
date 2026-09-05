@@ -4,12 +4,16 @@ Command Line Interface for Scrna Cell Qc Metrics Filter.
 import argparse
 import csv
 import json
+import os
 import sys
 from agents.models import SystemTaskPayload
 from agents.supervisor import SystemSupervisor
 from agents.base import AuditLogger
 
-supervisor = SystemSupervisor(model_provider="mock")
+
+def _get_supervisor():
+    """Lazily create a SystemSupervisor to avoid side effects on module import."""
+    return SystemSupervisor(model_provider="mock")
 
 
 def main(argv=None):
@@ -53,7 +57,7 @@ def main(argv=None):
             status_descriptor=args.status,
             is_critical_flag=args.critical,
         )
-        dossier = supervisor.process_task(payload)
+        dossier = _get_supervisor().process_task(payload)
         print("=" * 80)
         print(f"  SCRNA CELL QC METRICS FILTER")
         print(f"  Domain: AI Drug Discovery, Structural Biology & Wet-Lab Robotics | Standard: wwPDB / IUPAC / OpenSMILES / ISAC Standards")
@@ -69,7 +73,7 @@ def main(argv=None):
         return 0
 
     if args.command == "chat":
-        ans = supervisor.query_supervisory_chat(" ".join(args.query))
+        ans = _get_supervisor().query_supervisory_chat(" ".join(args.query))
         print(f"\n[Scrna Cell Qc Metrics Filter Supervisor]:\n{ans}\n")
         return 0
 
@@ -80,22 +84,34 @@ def main(argv=None):
         return 0
 
     if args.command == "batch":
+        if not os.path.isfile(args.input):
+            print(f"Error: Input CSV not found: {args.input}", file=sys.stderr)
+            return 1
+
         with open(args.input, mode="r", encoding="utf-8-sig") as f:
             reader = csv.DictReader(f)
             fieldnames = list(reader.fieldnames or [])
+            if not fieldnames:
+                print(f"Error: Input CSV has no headers: {args.input}", file=sys.stderr)
+                return 1
             rows = list(reader)
 
         out_fields = fieldnames + ["overall_urgency", "integrity_status", "total_alerts", "audit_hash"]
         out_rows = []
+        supervisor = _get_supervisor()
         for r in rows:
-            payload = SystemTaskPayload(
-                task_id=r.get("task_id", "TASK-01"),
-                target_identifier=r.get("target_identifier", "TARGET-01"),
-                primary_metric=float(r.get("primary_metric", 15.0)),
-                secondary_metric=float(r.get("secondary_metric", 5.0)),
-                status_descriptor=r.get("status_descriptor", "NOMINAL"),
-                is_critical_flag=bool(r.get("is_critical_flag", False)),
-            )
+            try:
+                payload = SystemTaskPayload(
+                    task_id=r.get("task_id", "TASK-01"),
+                    target_identifier=r.get("target_identifier", "TARGET-01"),
+                    primary_metric=float(r.get("primary_metric", 15.0)),
+                    secondary_metric=float(r.get("secondary_metric", 5.0)),
+                    status_descriptor=r.get("status_descriptor", "NOMINAL"),
+                    is_critical_flag=str(r.get("is_critical_flag", "")).lower() in ("true", "1", "yes"),
+                )
+            except (ValueError, TypeError) as e:
+                print(f"Error parsing row {r}: {e}", file=sys.stderr)
+                return 1
             dossier = supervisor.process_task(payload)
             row_dict = dict(r)
             row_dict["overall_urgency"] = dossier.overall_urgency.value
@@ -103,6 +119,10 @@ def main(argv=None):
             row_dict["total_alerts"] = dossier.total_alerts
             row_dict["audit_hash"] = dossier.audit_hash
             out_rows.append(row_dict)
+
+        out_dir = os.path.dirname(args.output)
+        if out_dir and not os.path.isdir(out_dir):
+            os.makedirs(out_dir, exist_ok=True)
 
         with open(args.output, mode="w", encoding="utf-8", newline="") as f:
             writer = csv.DictWriter(f, fieldnames=out_fields)
