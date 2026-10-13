@@ -6,7 +6,7 @@ Calculate library size, detected features, mitochondrial and ribosomal count fra
 
 The standalone interface in [web/](web/) accepts a local CSV, reports per-cell QC metrics and filtering decisions, and exports two CSV files. Choose **Load example data** to test without uploading anything. Files are parsed locally by JavaScript; they are not sent to a server. The interface accepts CSV files up to 10 MiB; use the Python CLI for larger data. The browser does not require Python, Pyodide, external fonts or external packages.
 
-Once GitHub Pages is enabled, the deployment workflow publishes `web/` on pushes to `master`.
+After enabling **Settings → Pages → Build and deployment → Source: GitHub Actions** once, the deployment workflow publishes `web/` on pushes to `master`. The live URL must be verified after deployment.
 
 ## Input format
 
@@ -67,7 +67,7 @@ node --check web/app.js
 node --test tests/qc-browser.test.js
 ```
 
-No frontend build is required. Open `web/index.html` in a current Chromium, Firefox or Safari browser; the UI uses standard File, Blob and DOM APIs. GitHub Actions tests the Python suite on 3.10–3.12 and the JavaScript QC logic with Node.
+No frontend build is required. For local browsing run `python -m http.server 8000 --directory web` and open `http://localhost:8000/` in a current Chromium, Firefox or Safari browser; the UI uses standard File, Blob and DOM APIs. GitHub Actions tests the Python suite on 3.10–3.12 and the JavaScript QC logic with Node.
 
 ## Privacy and limitations
 
