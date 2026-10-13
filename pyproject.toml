@@ -42,7 +42,7 @@ scrna-qc = "scrna_qc:main"
 scrna-cli = "cli:main"
 
 [tool.setuptools]
-py-modules = ["scrna_qc", "cli", "enrichment", "simulator"]
+py-modules = ["scrna_qc", "qc_metrics", "cli", "enrichment", "simulator"]
 
 [tool.setuptools.packages.find]
 include = ["agents*"]

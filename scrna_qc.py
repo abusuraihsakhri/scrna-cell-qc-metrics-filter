@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Single-Cell RNA-Seq (scRNA-Seq) Quality Filter
-Calculates nCounts, nFeatures, and percent mitochondrial / ribosomal reads per cell with outlier filtering.
+The 'matrix' command computes per-cell scRNA QC from count matrices. The older 'single' and 'batch' commands implement a separate legacy weighted score.
 
 Zero-dependency Python implementation with single and batch evaluation.
 Author: Dr. Abu Suraih Sakhri
@@ -16,7 +16,7 @@ from typing import Dict, Any
 
 
 def calculate_metrics(**kwargs) -> Dict[str, Any]:
-    """Core domain algorithm for scrna-cell-qc-metrics-filter.
+    """Legacy generic weighted-score calculation (not single-cell QC).
 
     Accepts keyword arguments; numeric values are weighted and summed
     to produce a composite score, classification, and recommendation.
@@ -120,21 +120,57 @@ def main(argv=None):
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Single parser
-    single_parser = subparsers.add_parser("single", help="Evaluate single case")
+    single_parser = subparsers.add_parser("single", help="Legacy generic weighted-score evaluation")
     single_parser.add_argument("--v1", type=float, default=10.0, help="Primary parameter")
     single_parser.add_argument("--v2", type=float, default=5.0, help="Secondary parameter")
     single_parser.add_argument("--v3", type=float, default=2.0, help="Tertiary parameter")
     single_parser.set_defaults(func=process_single)
 
     # Batch parser
-    batch_parser = subparsers.add_parser("batch", help="Process batch CSV")
+    batch_parser = subparsers.add_parser("batch", help="Legacy weighted-score CSV processing")
     batch_parser.add_argument("-i", "--input", required=True, help="Input CSV")
     batch_parser.add_argument("-o", "--output", default="results.csv", help="Output CSV")
 
+    # Real scRNA-seq QC from a dense gene-by-cell count matrix.
+    matrix_parser = subparsers.add_parser("matrix", help="Calculate per-cell QC from a gene-by-cell CSV")
+    matrix_parser.add_argument("-i", "--input", required=True, help="Count matrix CSV")
+    matrix_parser.add_argument("-o", "--output", default="cell_qc.csv", help="Per-cell metrics CSV")
+    matrix_parser.add_argument("--filtered-matrix", help="Optional count matrix containing only passing cells")
+    matrix_parser.add_argument("--min-counts", type=float, default=500)
+    matrix_parser.add_argument("--min-features", type=float, default=200)
+    matrix_parser.add_argument("--max-mito", type=float, default=20.0, help="Maximum mitochondrial percentage")
+    matrix_parser.add_argument("--max-ribo", type=float, help="Optional maximum ribosomal percentage")
+    matrix_parser.add_argument("--mito-prefix", default="MT-", help="Gene name prefix (e.g. MT- or mt-)")
     args = parser.parse_args(argv)
 
     if args.command == "single":
         args.func(args)
+    elif args.command == "matrix":
+        from pathlib import Path
+        from qc_metrics import calculate_matrix_qc, write_filtered_matrix, write_qc_csv
+        try:
+            source = Path(args.input).resolve()
+            targets = [Path(args.output).resolve()]
+            if args.filtered_matrix:
+                targets.append(Path(args.filtered_matrix).resolve())
+            if source in targets or len(set(targets)) != len(targets):
+                raise ValueError("Output paths must differ from input and from each other")
+            rows = calculate_matrix_qc(
+                args.input,
+                min_counts=args.min_counts,
+                min_features=args.min_features,
+                max_mito=args.max_mito,
+                max_ribo=args.max_ribo,
+                mito_prefix=args.mito_prefix,
+            )
+            write_qc_csv(rows, args.output)
+            passing = {row["cell_id"] for row in rows if row["pass_qc"]}
+            if args.filtered_matrix:
+                write_filtered_matrix(args.input, args.filtered_matrix, passing)
+            print(f"QC complete: {len(passing)}/{len(rows)} cells retained -> {args.output}")
+        except (OSError, ValueError, csv.Error) as exc:
+            print(f"Error: {exc}", file=sys.stderr)
+            sys.exit(1)
     elif args.command == "batch":
         try:
             process_batch(args.input, args.output)
