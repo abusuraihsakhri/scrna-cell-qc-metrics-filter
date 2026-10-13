@@ -77,9 +77,7 @@ def calculate_matrix_qc(
         for row_num, row in enumerate(reader, start=2):
             if len(row) != len(header):
                 raise ValueError(f"Row {row_num}: expected {len(header)} columns, got {len(row)}")
-            gene = row[0].strip()
-            if not gene:
-                raise ValueError(f"Row {row_num}: missing gene identifier")
+            gene = _label(row[0], "gene identifier")
             is_mito = gene.upper().startswith(mp)
             is_ribo = gene.upper().startswith(rp)
             genes += 1
