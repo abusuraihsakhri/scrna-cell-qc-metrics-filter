@@ -1,177 +1,78 @@
-# Scrna Cell Qc Metrics Filter
+# scRNA-seq Cell QC Metrics & Filter
 
-> **Domain:** Computational Biology & AI Drug Discovery
-> **Reference Guidelines & Standards:** `wwPDB, IUPAC & CLSI Computational Guidelines`
+Calculate library size, detected features, mitochondrial and ribosomal count fractions for each cell in a dense gene-by-cell CSV. Apply adjustable QC cutoffs and export results or a count matrix containing only passing cells.
 
-<div align="center">
+## Browser application
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-![Python](https://img.shields.io/badge/Python-3.10%20%7C%203.11%20%7C%203.12-3776AB.svg?logo=python&logoColor=white)
-![FastAPI](https://img.shields.io/badge/FastAPI-0.111-009688.svg?logo=fastapi&logoColor=white)
-![Audit Trail](https://img.shields.io/badge/Audit-HMAC--SHA256_Tamper--Evident-brightgreen.svg)
-![Zero-PHI Guard](https://img.shields.io/badge/Guard-Zero--PHI_Outbound-blue.svg)
-![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg?logo=docker&logoColor=white)
+The standalone interface in [web/](web/) accepts a local CSV, reports per-cell QC metrics and filtering decisions, and exports two CSV files. Choose **Load example data** to test without uploading anything. Files are parsed locally by JavaScript; they are not sent to a server. The interface accepts CSV files up to 10 MiB; use the Python CLI for larger data. The browser does not require Python, Pyodide, external fonts or external packages.
 
-</div>
+Once GitHub Pages is enabled, the deployment workflow publishes `web/` on pushes to `master`.
 
----
+## Input format
 
-## 📖 What It Does
+First column: gene identifiers. Remaining columns: cell barcodes. Values: **nonnegative integer** counts.
 
-Single-Cell RNA-Seq (scRNA-Seq) Quality Filter
-Calculates nCounts, nFeatures, and percent mitochondrial / ribosomal reads per cell with outlier filtering.
-
-Zero-dependency Python implementation with single and batch evaluation.
-Author: Dr. Abu Suraih Sakhri
-License: MIT
-
----
-
-## ⚙️ Key Capabilities & Algorithmic Modules
-
-### 🔬 Analytical Functions
-
-- **`calculate_metrics()`**: Core domain algorithm that computes a weighted score from numeric inputs and classifies results into Low/Moderate/High tiers.
-- **`process_single()`** — Evaluates a single case with provided parameters.
-- **`process_batch()`** — Processes a CSV file of records, appending QC metrics to each row.
-- **`main()`** — CLI entry point supporting `single` and `batch` subcommands.
-
----
-
-## 📐 Mathematical Formulation & Logic
-
-```text
-score = primary_val + sum(nv * (1/idx) for idx, nv in enumerate(remaining_vals, start=2))
-rounded_score = round(score, 2)
-
-Classification tiers:
-  score < 10.0  → "Low / Standard"
-  score < 25.0  → "Moderate / Intermediate"
-  score >= 25.0 → "High / Severe"
+```csv
+gene,good,high_mito,empty
+MT-CO1,10,80,0
+RPL13,10,10,0
+ACTB,80,10,0
+GAPDH,100,0,0
 ```
 
----
+This is [example_matrix.csv](example_matrix.csv). Counts can be raw UMI or read counts, but must not be normalized or log-transformed. All data are interpreted as a **dense gene-by-cell matrix**, not 10x MTX, HDF5 or AnnData. Cell IDs must be unique. Unsafe spreadsheet-formula prefixes in gene/cell labels are rejected.
 
-## 💻 Installation
+### Calculation and defaults
+
+| Column | Definition |
+| --- | --- |
+| `n_counts` | Sum of counts across all gene rows for the cell |
+| `n_features` | Number of gene rows with counts > 0 |
+| `percent_mt` | 100 × counts for genes with prefix `MT-` / `n_counts` |
+| `percent_ribo` | 100 × counts for genes with prefix `RPL` or `RPS` / `n_counts` |
+| `pass_qc` | Nonzero total, counts ≥ minimum, features ≥ minimum, mitochondrial % ≤ maximum, and optional ribosomal % ≤ maximum |
+
+Defaults: minimum 500 counts, minimum 200 detected features, maximum 20% mitochondrial counts, **no ribosomal exclusion**. The mitochondrial prefix is case-insensitive and configurable. Zero-count cells report 0% for both fractions but **always fail**. Cutoffs are inclusive. Prefix matching is a heuristic; inspect gene annotations, mitochondrial nomenclature and dataset distributions before using thresholds. Ribosomal pseudogene annotations may be included.
+
+## Python CLI
+
+Requires Python 3.10 or newer. The new matrix module uses only the standard library; the package also contains a separate legacy audit API requiring Pydantic.
 
 ```bash
-# Clone the repository
-git clone https://github.com/abusuraihsakhri/scrna-cell-qc-metrics-filter.git
-cd scrna-cell-qc-metrics-filter
-
-# Install core dependencies (pydantic required)
-pip install pydantic>=2.0
-
-# Optional: Install API server dependencies
-pip install fastapi>=0.110 "uvicorn[standard]>=0.27"
-
-# Optional: Install development dependencies
-pip install pytest>=8.0
+python -m pip install -e ".[dev]"
+python scrna_qc.py matrix -i example_matrix.csv -o cell_qc.csv \
+  --filtered-matrix filtered_matrix.csv \
+  --min-counts 200 --min-features 4 --max-mito 5
 ```
 
----
+The example passes only cell `good`. Optional `--max-ribo 30` applies a ribosomal cutoff. For mouse data, use `--mito-prefix mt-`. All cell metrics are exported regardless of pass/fail status; the filtered matrix preserves gene rows and passing cell columns.
 
-## 💻 CLI Quickstart & Usage
+The earlier commands `python scrna_qc.py single` and `python scrna_qc.py batch` are retained for compatibility. **They calculate a generic weighted score and are not valid scRNA-seq QC metrics.** Likewise, `python cli.py audit|batch|chat|verify-audit|serve` exposes a separate legacy generic audit system, not single-cell QC or clinical decision support.
 
-### 1. Single Case Evaluation
+### API / Docker (legacy audit system)
+
 ```bash
-python scrna_qc.py single --v1 10.0 --v2 5.0 --v3 2.0
-```
-
-### 2. Batch CSV Processing
-```bash
-python scrna_qc.py batch -i sample.csv -o results.csv
-```
-
-### 3. Enterprise CLI (requires pydantic)
-```bash
-# Audit a single task
-python cli.py audit --task-id TASK-001 --primary 28.5 --secondary 14.2
-
-# Batch process records
-python cli.py batch -i sample.csv -o results.csv
-
-# Verify audit trail integrity
-python cli.py verify-audit
-
-# Launch FastAPI REST server
+python -m pip install -e ".[api]"
 python cli.py serve --host 127.0.0.1 --port 8000
 ```
 
-### Parameter Reference
-- `--v1`, `--v2`, `--v3`: Numeric parameters for single evaluation (default: 10.0, 5.0, 2.0)
-- `-i`, `--input`: Input CSV file path (required for batch)
-- `-o`, `--output`: Output CSV file path (default: results.csv)
+For Docker Compose, supply a strong `AUDIT_SECRET_KEY` from the deployment environment before starting. Never commit deployment secrets. Audit records are in-memory and are not persistent across restarts; the identifier screen is heuristic and **cannot guarantee PHI detection**. Do not submit identifiable patient data. GitHub Pages hosts only the static QC application, not FastAPI.
 
-### Input Data Schema
-
-| Field | Description | Requirement |
-|:------|:------------|:------------|
-| `Patient_ID` | Patient identifier | Required |
-| `v1` | Primary measurement | Required |
-| `v2` | Secondary measurement | Required |
-| `v3` | Tertiary measurement | Optional |
-
----
-
-## 🛡️ Security & Enterprise Architecture
-
-* **Zero-PHI Outbound Interceptor:** Active regex inspection blocking SSNs, MRNs, phone numbers, and patient identifiers.
-* **Tamper-Evident HMAC-SHA256 Audit Trail:** Chained, cryptographically signed logs for every evaluation and state transition.
-* **Configurable Audit Secret:** Set `AUDIT_SECRET_KEY` environment variable for persistent audit integrity across restarts. Without it, a random key is generated (with a warning).
-* **FastAPI & Prometheus Telemetry:** Exposes OpenAPI 3.1 REST endpoints and operational Prometheus metrics (`/metrics`).
-
----
-
-## 🧪 Testing & Verification
-
-Run the automated test suite:
+## Tests and development
 
 ```bash
-pytest -v
+python -m pip install -e ".[dev]"
+pytest -q
+node --check web/app.js
+node --test tests/qc-browser.test.js
 ```
 
-Run specific test files:
+No frontend build is required. Open `web/index.html` in a current Chromium, Firefox or Safari browser; the UI uses standard File, Blob and DOM APIs. GitHub Actions tests the Python suite on 3.10–3.12 and the JavaScript QC logic with Node.
 
-```bash
-pytest tests/ -v          # Enterprise module tests
-pytest test_scrna_qc.py -v  # Core QC tests
-```
+## Privacy and limitations
 
-Execute high-throughput batch simulation benchmarks:
+Browser input and downloaded results stay on the local device unless the user chooses to share them. JavaScript uses no external analytics, network requests or server calls. **Small dense CSV only** in the browser; huge single-cell matrices should be processed with established sparse-matrix workflows. This tool does not perform ambient RNA correction, doublet detection, automated outlier modeling, sample stratification or biological interpretation.
 
-```bash
-python simulator.py 100
-```
+## License
 
----
-
-## 🐳 Container Deployment
-
-```bash
-docker build -t scrna-cell-qc-metrics-filter .
-docker run -p 8000:8000 scrna-cell-qc-metrics-filter
-```
-
----
-
-## 📁 Project Structure
-
-```
-scrna-cell-qc-metrics-filter/
-├── scrna_qc.py          # Core QC algorithm & CLI
-├── cli.py               # Enterprise CLI with audit/PHI features
-├── enrichment.py        # Enrichment analysis modules
-├── simulator.py         # High-throughput simulation
-├── agents/              # Enterprise agent framework
-│   ├── base.py          # Security, PHI guard, audit trail
-│   ├── models.py        # Pydantic data models
-│   ├── supervisor.py    # Multi-agent orchestrator
-│   ├── workers.py       # Specialized domain workers
-│   ├── api.py           # FastAPI REST server
-│   └── ...
-├── tests/               # Test suite
-├── sample.csv           # Sample input data
-├── pyproject.toml       # Project configuration
-└── Dockerfile           # Container build
-```
+MIT — see [LICENSE](LICENSE).
