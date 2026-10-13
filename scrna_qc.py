@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Single-Cell RNA-Seq (scRNA-Seq) Quality Filter
-Calculates nCounts, nFeatures, and percent mitochondrial / ribosomal reads per cell with outlier filtering.
+The 'matrix' command computes per-cell scRNA QC from count matrices. The older 'single' and 'batch' commands implement a separate legacy weighted score.
 
 Zero-dependency Python implementation with single and batch evaluation.
 Author: Dr. Abu Suraih Sakhri
@@ -16,7 +16,7 @@ from typing import Dict, Any
 
 
 def calculate_metrics(**kwargs) -> Dict[str, Any]:
-    """Core domain algorithm for scrna-cell-qc-metrics-filter.
+    """Legacy generic weighted-score calculation (not single-cell QC).
 
     Accepts keyword arguments; numeric values are weighted and summed
     to produce a composite score, classification, and recommendation.
@@ -120,14 +120,14 @@ def main(argv=None):
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     # Single parser
-    single_parser = subparsers.add_parser("single", help="Evaluate single case")
+    single_parser = subparsers.add_parser("single", help="Legacy generic weighted-score evaluation")
     single_parser.add_argument("--v1", type=float, default=10.0, help="Primary parameter")
     single_parser.add_argument("--v2", type=float, default=5.0, help="Secondary parameter")
     single_parser.add_argument("--v3", type=float, default=2.0, help="Tertiary parameter")
     single_parser.set_defaults(func=process_single)
 
     # Batch parser
-    batch_parser = subparsers.add_parser("batch", help="Process batch CSV")
+    batch_parser = subparsers.add_parser("batch", help="Legacy weighted-score CSV processing")
     batch_parser.add_argument("-i", "--input", required=True, help="Input CSV")
     batch_parser.add_argument("-o", "--output", default="results.csv", help="Output CSV")
 
