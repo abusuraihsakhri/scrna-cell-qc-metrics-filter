@@ -82,8 +82,11 @@ def calculate_matrix_qc(
             is_ribo = gene.upper().startswith(rp)
             genes += 1
             for i, raw in enumerate(row[1:]):
+                count_text = raw.strip()
+                if not count_text.isascii() or not count_text.isdecimal():
+                    raise ValueError(f"Row {row_num}, cell {cells[i]}: expected nonnegative integer count")
                 try:
-                    value = int(raw.strip())
+                    value = int(count_text)
                 except ValueError as exc:
                     raise ValueError(f"Row {row_num}, cell {cells[i]}: expected integer count") from exc
                 if value < 0 or value > MAX_EXACT_COUNT or totals[i] + value > MAX_EXACT_COUNT:
